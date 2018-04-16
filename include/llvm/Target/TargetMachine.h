@@ -340,7 +340,7 @@ public:
 
   /// \brief Adds an AsmPrinter pass to the pipeline that prints assembly or
   /// machine code from the MI representation.
-  bool addAsmPrinter(PassManagerBase &PM, raw_pwrite_stream &Out,
+  virtual bool addAsmPrinter(PassManagerBase &PM, raw_pwrite_stream &Out,
                      CodeGenFileType FileTYpe, MCContext &Context);
 };
 

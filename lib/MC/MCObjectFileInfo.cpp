@@ -470,6 +470,10 @@ void MCObjectFileInfo::initELFMCObjectFileInfo(const Triple &T, bool Large) {
   if (T.isOSSolaris() && T.getArch() != Triple::x86_64)
     EHSectionFlags |= ELF::SHF_WRITE;
 
+  
+  MagicStringTableSection = Ctx->getELFSection("magic_table", ELF::SHT_PROGBITS, 0);
+  CFICheckTableSection = Ctx->getELFSection("cfi_check_table", ELF::SHT_PROGBITS, 0);
+  SandboxDataSection = Ctx->getELFSection("sandbox_data", ELF::SHT_PROGBITS, ELF::SHF_WRITE | ELF::SHF_ALLOC); 
   // ELF
   BSSSection = Ctx->getELFSection(".bss", ELF::SHT_NOBITS,
                                   ELF::SHF_WRITE | ELF::SHF_ALLOC);

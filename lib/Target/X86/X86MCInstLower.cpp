@@ -47,6 +47,8 @@
 
 using namespace llvm;
 
+extern cl::opt<bool> InstrumentSandboxingCFI;
+
 namespace {
 
 /// X86MCInstLower - This class is used to lower an MachineInstr into an MCInst.
@@ -1458,6 +1460,55 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
       OutStreamer->AddComment("EVEX TO VEX Compression ", false);
   }
 
+  if (InstrumentSandboxingCFI) {
+      const TargetLoweringObjectFile *TLOF = TM.getObjFileLowering();
+      SmallString<128> NameStr("__cfi_chk_fail");
+      MCSymbol *magic_symbol = TLOF->getContext().getOrCreateSymbol(NameStr);
+      const MCExpr *jump_target = MCSymbolRefExpr::create(magic_symbol, TLOF->getContext()); 
+    if (MI->getOpcode() == X86::RETQ) {
+      SmallString<128> NameStr("__cfi_check_label_" + std::to_string(CFICheckLabelCount));
+      CFICheckLabelCount++;
+      MCSymbol *magic_symbol = TLOF->getContext().getOrCreateSymbol(NameStr);
+      OutStreamer->EmitLabel(magic_symbol); 
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::MOV64ri).addReg(X86::RDX).addImm(0x6f6f6f6f6f6f6f6f), getSubtargetInfo());
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::NOT64r).addReg(X86::RDX).addReg(X86::RDX), getSubtargetInfo());
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::POP64r).addReg(X86::RCX), getSubtargetInfo());
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::BNDCU64rr).addReg(X86::BND2).addReg(X86::RCX), getSubtargetInfo()); 
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::BNDCL64rr).addReg(X86::BND2).addReg(X86::RCX), getSubtargetInfo()); 
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::CMP64rm).addReg(X86::RDX).addReg(X86::RCX).addImm(1).addReg(X86::NoRegister).addImm(0).addReg(X86::NoRegister), getSubtargetInfo());
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::JNE_1).addExpr(jump_target), getSubtargetInfo());
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::ADD64ri32).addReg(X86::RCX).addReg(X86::RCX).addImm(8), getSubtargetInfo());
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::JMP64r).addReg(X86::RCX), getSubtargetInfo());
+      return;
+    }
+
+    if (MI->isCall()) {
+      if (MI->getOpcode() == X86::CALL64pcrel32){
+          //pass
+      }else if (MI->getOpcode() == X86::CALL64r) {
+        int call_register = MI->getOperand(0).getReg();
+        int cfi_register = X86::R10;
+        if (call_register == X86::R10)
+          cfi_register = X86::R11;
+        SmallString<128> NameStr("__cfi_check_label_" + std::to_string(CFICheckLabelCount));
+        CFICheckLabelCount++;
+        MCSymbol *magic_symbol = TLOF->getContext().getOrCreateSymbol(NameStr);
+        OutStreamer->EmitLabel(magic_symbol); 
+        OutStreamer->EmitInstruction(MCInstBuilder(X86::BNDCU64rr).addReg(X86::BND2).addReg(call_register), getSubtargetInfo()); 
+        OutStreamer->EmitInstruction(MCInstBuilder(X86::BNDCL64rr).addReg(X86::BND2).addReg(call_register), getSubtargetInfo()); 
+        OutStreamer->EmitInstruction(MCInstBuilder(X86::MOV64ri).addReg(cfi_register).addImm(0x6565656565656565), getSubtargetInfo());
+        OutStreamer->EmitInstruction(MCInstBuilder(X86::NOT64r).addReg(cfi_register).addReg(cfi_register), getSubtargetInfo());
+        OutStreamer->EmitInstruction(MCInstBuilder(X86::CMP64rm).addReg(cfi_register).addReg(call_register).addImm(1).addReg(X86::NoRegister).addImm(-8).addReg(X86::NoRegister), getSubtargetInfo());
+        OutStreamer->EmitInstruction(MCInstBuilder(X86::JNE_1).addExpr(jump_target), getSubtargetInfo());
+
+      }else{
+          errs() << "Cannot handle call instruction";
+          MI->print(errs());
+          return;
+      }
+    }
+  }
+
   switch (MI->getOpcode()) {
   case TargetOpcode::DBG_VALUE:
     llvm_unreachable("Should be handled target independently");
@@ -2043,6 +2094,19 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
     SMShadowTracker.emitShadowPadding(*OutStreamer, getSubtargetInfo());
     // Then emit the call
     OutStreamer->EmitInstruction(TmpInst, getSubtargetInfo());
+   
+    if(InstrumentSandboxingCFI) { 
+	    // Emit the magic string post the call
+	    const TargetLoweringObjectFile *TLOF = TM.getObjFileLowering();
+	    std::string magic_label;
+	    magic_label = "__magic_label_" + std::to_string(FunctionMagicLabelCount);
+	    FunctionMagicLabelCount++;
+	    SmallString<128> NameStr(magic_label);
+	    MCSymbol *magic_symbol = TLOF->getContext().getOrCreateSymbol(NameStr);
+	    OutStreamer->EmitLabel(magic_symbol);
+	    OutStreamer->emitFill(8, 0x90);
+    }
+    
     return;
   }
 

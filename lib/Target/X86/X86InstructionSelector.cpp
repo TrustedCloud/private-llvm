@@ -1337,7 +1337,6 @@ bool X86InstructionSelector::materializeFP(MachineInstr &I,
   unsigned CPI = MF.getConstantPool()->getConstantPoolIndex(CFP, Align);
   MachineInstr *LoadInst = nullptr;
   unsigned char OpFlag = STI.classifyLocalReference(nullptr);
-
   if (CM == CodeModel::Large && STI.is64Bit()) {
     // Under X86-64 non-small code model, GV (and friends) are 64-bits, so
     // they cannot be folded into immediate fields.

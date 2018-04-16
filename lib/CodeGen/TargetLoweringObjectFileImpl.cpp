@@ -62,6 +62,9 @@
 using namespace llvm;
 using namespace dwarf;
 
+extern cl::opt<bool> SandBoxStores;
+extern cl::opt<bool> SandBoxLoads;
+
 static void GetObjCImageInfo(Module &M, unsigned &Version, unsigned &Flags,
                              StringRef &Section) {
   SmallVector<Module::ModuleFlagEntry, 8> ModuleFlags;
@@ -451,6 +454,11 @@ static MCSectionELF *selectELFSectionForGlobal(
 MCSection *TargetLoweringObjectFileELF::SelectSectionForGlobal(
     const GlobalObject *GO, SectionKind Kind, const TargetMachine &TM) const {
   unsigned Flags = getELFSectionFlags(Kind);
+
+
+  if(!Kind.isText() && (SandBoxLoads || SandBoxStores))
+    return getSandboxDataSection();
+
 
   // If we have -ffunction-section or -fdata-section then we should emit the
   // global value to a uniqued section specifically for it.

@@ -47,6 +47,7 @@
 #include "llvm/Target/TargetOptions.h"
 #include <memory>
 #include <string>
+#include "llvm/IR/LegacyPassManager.h"
 
 using namespace llvm;
 
@@ -494,4 +495,5 @@ void X86PassConfig::addPreEmitPass() {
 
 void X86PassConfig::addPreEmitPass2() {
   addPass(createX86RetpolineThunksPass());
+  addPass(createSandBoxingPass());
 }

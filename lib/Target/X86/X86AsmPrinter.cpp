@@ -39,9 +39,11 @@
 #include "llvm/Support/TargetRegistry.h"
 using namespace llvm;
 
+extern cl::opt<bool> InstrumentSandboxingCFI;
+
 X86AsmPrinter::X86AsmPrinter(TargetMachine &TM,
                              std::unique_ptr<MCStreamer> Streamer)
-    : AsmPrinter(TM, std::move(Streamer)), SM(*this), FM(*this) {}
+    : AsmPrinter(TM, std::move(Streamer)), SM(*this), FM(*this), FunctionMagicLabelCount(0), CFICheckLabelCount(0) {}
 
 //===----------------------------------------------------------------------===//
 // Primitive Helper Functions.
@@ -609,6 +611,19 @@ MCSymbol *X86AsmPrinter::GetCPISymbol(unsigned CPID) const {
 
   return AsmPrinter::GetCPISymbol(CPID);
 }
+void X86AsmPrinter::EmitFunctionEntryLabel() {
+  if (InstrumentSandboxingCFI) {
+    const TargetLoweringObjectFile *TLOF = TM.getObjFileLowering();
+    std::string magic_label;
+    magic_label = "__magic_label_" + std::to_string(FunctionMagicLabelCount);
+    FunctionMagicLabelCount++;
+    SmallString<128> NameStr(magic_label);
+    MCSymbol *magic_symbol = TLOF->getContext().getOrCreateSymbol(NameStr);
+    OutStreamer->EmitLabel(magic_symbol);
+    OutStreamer->emitFill(8, 0x9a); 
+  }
+  AsmPrinter::EmitFunctionEntryLabel();
+}
 
 void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
   const Triple &TT = TM.getTargetTriple();
@@ -662,6 +677,28 @@ void X86AsmPrinter::EmitEndOfAsmFile(Module &M) {
     SM.serializeToStackMapSection();
     FM.serializeToFaultMapSection();
   }
+
+
+  if(InstrumentSandboxingCFI) {
+    const TargetLoweringObjectFile *TLOF = TM.getObjFileLowering(); 
+    OutStreamer->SwitchSection(TLOF->getMagicStringTableSection());
+    for (int i = 0; i < FunctionMagicLabelCount; i++) {
+      std::string magic_label;
+      magic_label = "__magic_label_" + std::to_string(i);
+      SmallString<128> NameStr(magic_label);
+      MCSymbol *magic_symbol = TLOF->getContext().getOrCreateSymbol(NameStr);
+      OutStreamer->EmitSymbolValue(magic_symbol, 8);      
+    }
+    OutStreamer->SwitchSection(TLOF->getCFICheckTableSection());
+    for (int i = 0; i < CFICheckLabelCount; i++) {
+      std::string cfi_check_label;
+      cfi_check_label = "__cfi_check_label_" + std::to_string(i);
+      SmallString<128> NameStr(cfi_check_label);
+      MCSymbol *cfi_check_symbol = TLOF->getContext().getOrCreateSymbol(NameStr);
+      OutStreamer->EmitSymbolValue(cfi_check_symbol, 8);
+    }
+  }
+  
 }
 
 //===----------------------------------------------------------------------===//

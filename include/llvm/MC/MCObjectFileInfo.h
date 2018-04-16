@@ -199,6 +199,11 @@ protected:
   MCSection *SXDataSection;
   MCSection *GFIDsSection;
 
+  MCSection *MagicStringTableSection;
+  MCSection *CFICheckTableSection;
+  
+  MCSection *SandboxDataSection;
+
 public:
   void InitMCObjectFileInfo(const Triple &TT, bool PIC, MCContext &ctx,
                             bool LargeCodeModel = false);
@@ -280,7 +285,10 @@ public:
   MCSection *getDwarfCUIndexSection() const { return DwarfCUIndexSection; }
   MCSection *getDwarfTUIndexSection() const { return DwarfTUIndexSection; }
   MCSection *getDwarfSwiftASTSection() const { return DwarfSwiftASTSection; }
-
+  MCSection *getMagicStringTableSection() const { return MagicStringTableSection; }
+  MCSection *getCFICheckTableSection() const { return CFICheckTableSection; }
+  MCSection *getSandboxDataSection() const { return SandboxDataSection; }
+  
   MCSection *getCOFFDebugSymbolsSection() const {
     return COFFDebugSymbolsSection;
   }

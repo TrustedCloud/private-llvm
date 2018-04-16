@@ -1,0 +1,5 @@
+[component_0]
+type = Library
+name = SandBoxing
+parent = X86
+add_to_library_groups = X86

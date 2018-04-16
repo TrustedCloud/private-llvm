@@ -125,6 +125,10 @@ InstructionSelector *createX86InstructionSelector(const X86TargetMachine &TM,
                                                   X86Subtarget &,
                                                   X86RegisterBankInfo &);
 
+
+FunctionPass *createSandBoxingPass();
+FunctionPass *createDummyPass();
+
 void initializeEvexToVexInstPassPass(PassRegistry &);
 
 } // End llvm namespace

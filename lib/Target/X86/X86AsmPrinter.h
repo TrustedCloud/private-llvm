@@ -42,6 +42,10 @@ class LLVM_LIBRARY_VISIBILITY X86AsmPrinter : public AsmPrinter {
   // To minimise the number of NOPs used, the shadow tracker counts the number
   // of instruction bytes output since the last stackmap. Only if there are too
   // few instruction bytes to cover the shadow are NOPs used for padding.
+
+
+  int FunctionMagicLabelCount;
+  int CFICheckLabelCount;
   class StackMapShadowTracker {
   public:
     void startFunction(MachineFunction &MF) {
@@ -141,6 +145,7 @@ public:
   bool runOnMachineFunction(MachineFunction &F) override;
   void EmitFunctionBodyStart() override;
   void EmitFunctionBodyEnd() override;
+  void EmitFunctionEntryLabel() override;
 };
 
 } // end namespace llvm
