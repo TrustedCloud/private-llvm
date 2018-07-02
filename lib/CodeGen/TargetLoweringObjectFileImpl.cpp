@@ -511,6 +511,8 @@ bool TargetLoweringObjectFileELF::shouldPutJumpTableInFunctionSection(
 MCSection *TargetLoweringObjectFileELF::getSectionForConstant(
     const DataLayout &DL, SectionKind Kind, const Constant *C,
     unsigned &Align) const {
+  return getSandboxDataSection();
+
   if (Kind.isMergeableConst4() && MergeableConst4Section)
     return MergeableConst4Section;
   if (Kind.isMergeableConst8() && MergeableConst8Section)

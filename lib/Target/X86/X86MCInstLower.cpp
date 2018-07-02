@@ -1470,12 +1470,12 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
       CFICheckLabelCount++;
       MCSymbol *magic_symbol = TLOF->getContext().getOrCreateSymbol(NameStr);
       OutStreamer->EmitLabel(magic_symbol); 
-      OutStreamer->EmitInstruction(MCInstBuilder(X86::MOV64ri).addReg(X86::RDX).addImm(0x6f6f6f6f6f6f6f6f), getSubtargetInfo());
-      OutStreamer->EmitInstruction(MCInstBuilder(X86::NOT64r).addReg(X86::RDX).addReg(X86::RDX), getSubtargetInfo());
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::MOV64ri).addReg(X86::R8).addImm(0x6f6f6f6f6f6f6f6f), getSubtargetInfo());
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::NOT64r).addReg(X86::R8).addReg(X86::R8), getSubtargetInfo());
       OutStreamer->EmitInstruction(MCInstBuilder(X86::POP64r).addReg(X86::RCX), getSubtargetInfo());
       OutStreamer->EmitInstruction(MCInstBuilder(X86::BNDCU64rr).addReg(X86::BND2).addReg(X86::RCX), getSubtargetInfo()); 
       OutStreamer->EmitInstruction(MCInstBuilder(X86::BNDCL64rr).addReg(X86::BND2).addReg(X86::RCX), getSubtargetInfo()); 
-      OutStreamer->EmitInstruction(MCInstBuilder(X86::CMP64rm).addReg(X86::RDX).addReg(X86::RCX).addImm(1).addReg(X86::NoRegister).addImm(0).addReg(X86::NoRegister), getSubtargetInfo());
+      OutStreamer->EmitInstruction(MCInstBuilder(X86::CMP64rm).addReg(X86::R8).addReg(X86::RCX).addImm(1).addReg(X86::NoRegister).addImm(0).addReg(X86::NoRegister), getSubtargetInfo());
       OutStreamer->EmitInstruction(MCInstBuilder(X86::JNE_1).addExpr(jump_target), getSubtargetInfo());
       OutStreamer->EmitInstruction(MCInstBuilder(X86::ADD64ri32).addReg(X86::RCX).addReg(X86::RCX).addImm(8), getSubtargetInfo());
       OutStreamer->EmitInstruction(MCInstBuilder(X86::JMP64r).addReg(X86::RCX), getSubtargetInfo());
@@ -1502,7 +1502,7 @@ void X86AsmPrinter::EmitInstruction(const MachineInstr *MI) {
         OutStreamer->EmitInstruction(MCInstBuilder(X86::JNE_1).addExpr(jump_target), getSubtargetInfo());
 
       }else{
-          errs() << "Cannot handle call instruction";
+          errs() << "Cannot handle call instruction ";
           MI->print(errs());
           return;
       }

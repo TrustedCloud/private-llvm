@@ -127,7 +127,7 @@ InstructionSelector *createX86InstructionSelector(const X86TargetMachine &TM,
 
 
 FunctionPass *createSandBoxingPass();
-FunctionPass *createDummyPass();
+FunctionPass *createSandBoxingPreRegallocPass();
 
 void initializeEvexToVexInstPassPass(PassRegistry &);
 

@@ -23,13 +23,15 @@ using namespace llvm;
 cl::opt<bool> SandBoxLoads("sandbox-loads", cl::desc("Insert sand boxing checks for loads"), cl::value_desc("bool"));
 cl::opt<bool> SandBoxStores("sandbox-stores", cl::desc("Insert sand boxing checks for stores"), cl::value_desc("bool"));
 cl::opt<bool> InstrumentSandboxingCFI("instrument-sandbox-cfi", cl::desc("Insert CFI instrumentation for sandboxing"), cl::value_desc("bool"));
+//cl::opt<bool> SimulateMPX("simulate-mpx", cl::desc("Simulate use of MPX instead of using MPX instructions"), cl::value_desc("bool"));
+
 
 /*typedef struct {
-	int base_register;
-	int index_register;
-	int stride;
-} mem_operand_struct;
-*/
+  int base_register;
+  int index_register;
+  int stride;
+  } mem_operand_struct;
+ */
 
 
 typedef std::tuple<int, int, int> mem_operand_struct;
@@ -37,14 +39,14 @@ typedef std::set<mem_operand_struct> register_cache_type;
 
 namespace {
 
-	class DummyPass : public MachineFunctionPass {
+	class SandBoxingPreRegallocPass : public MachineFunctionPass {
 		public: 
 			static char ID;
-			DummyPass() : MachineFunctionPass(ID) {}
+			SandBoxingPreRegallocPass() : MachineFunctionPass(ID) {}
 			bool runOnMachineFunction(MachineFunction &MF) {
-				return false;
+				return true;
 			}
-		
+
 	};
 
 	class SandBoxingPass : public MachineFunctionPass {
@@ -64,6 +66,7 @@ namespace {
 			int isPush(const MachineInstr &MI) {
 				switch(MI.getOpcode()) {
 					case X86::PUSH64r:
+					case X86::PUSH64i8:
 						return 1;
 					default:
 						return 0;
@@ -117,10 +120,14 @@ namespace {
 					int mem_index = getMemLocation(&MI);
 					if (mem_index == -1) {
 						errs() << "No mem operand for \n";
+						errs() << "In function = " << MI.getParent()->getParent()->getName().str() << "\n";
 						MI.print(errs());
 						return -1;
 					}
-					if (MI.getOperand(2 + mem_index).getReg() == X86::NoRegister){
+					if (MI.getOperand(0 + mem_index).getReg() == X86::RIP) {
+						// This is a got pc rel entry, this should not have a check. This will be converted to a LEAQ
+					}
+					else if (MI.getOperand(2 + mem_index).getReg() == X86::NoRegister){
 						if (MI.getOperand(0 + mem_index).getReg() == X86::NoRegister)
 							return 1;
 						std::get<0>(mem_operand) = MI.getOperand(0 + mem_index).getReg();
@@ -135,10 +142,11 @@ namespace {
 						std::get<0>(mem_operand) = MI.getOperand(0 + mem_index).getReg();
 						std::get<1>(mem_operand) = MI.getOperand(2 + mem_index).getReg();
 						std::get<2>(mem_operand) = MI.getOperand(1 + mem_index).getImm();
-						if (register_cache.find(mem_operand) != register_cache.end())
+						if (register_cache.find(mem_operand) != register_cache.end()) {
 							return 1;
+						}
 						BNDL = BuildMI(*(MI.getParent()), &MI, MI.getDebugLoc(), TII->get(X86::BNDCL64rm), X86::BND0).add(MI.getOperand(0 + mem_index)).add(MI.getOperand(1 + mem_index)).add(MI.getOperand(2 + mem_index)).add(MI.getOperand(3 + mem_index)).add(MI.getOperand(4 + mem_index));
-						BNDU = BuildMI(*(MI.getParent()), &MI, MI.getDebugLoc(), TII->get(X86::BNDCL64rm), X86::BND0).add(MI.getOperand(0 + mem_index)).add(MI.getOperand(1 + mem_index)).add(MI.getOperand(2 + mem_index)).add(MI.getOperand(3 + mem_index)).add(MI.getOperand(4 + mem_index));
+						BNDU = BuildMI(*(MI.getParent()), &MI, MI.getDebugLoc(), TII->get(X86::BNDCU64rm), X86::BND0).add(MI.getOperand(0 + mem_index)).add(MI.getOperand(1 + mem_index)).add(MI.getOperand(2 + mem_index)).add(MI.getOperand(3 + mem_index)).add(MI.getOperand(4 + mem_index));
 						register_cache.insert(mem_operand);
 					}
 				}
@@ -154,18 +162,40 @@ namespace {
 						DEBUG_SANDBOXING(MI.print(errs()));
 						DEBUG_SANDBOXING(errs() << "\n");
 						if (MI.mayLoadOrStore()) {
-							if ((SandBoxStores && MI.mayStore()) || (SandBoxLoads && MI.mayLoad())) {
+							if ((SandBoxStores && MI.mayStore()) || (SandBoxLoads && MI.mayLoad())) { 
 								insertBoundCheckBeforeInstruction(MI, register_cache);
 							}
 						}
-						
+
 						updateRegisterCache(MI, register_cache);
 					}
 
 				}
 				return true;
 			}
+			void removeCall64m(MachineFunction &MF) {
+				const TargetInstrInfo *TII;
+				const X86Subtarget *STI;
+				STI = &MF.getSubtarget<X86Subtarget>();
+				TII = STI->getInstrInfo();
+				for (MachineFunction::iterator BasicBlockIterator = MF.begin(); BasicBlockIterator != MF.end(); BasicBlockIterator++ ) {
+					for(MachineBasicBlock::iterator MachineInstructionIterator = BasicBlockIterator->begin(); MachineInstructionIterator != BasicBlockIterator->end(); MachineInstructionIterator++) {
+						MachineInstr &MI = *MachineInstructionIterator;
+						if (MI.getOpcode() == X86::CALL64m) {
+							unsigned Reg = X86::R11;
+							MachineBasicBlock::iterator MoveInstruction = BuildMI(*BasicBlockIterator, &MI, MI.getDebugLoc(), TII->get(X86::MOV64rm), Reg).add(MI.getOperand(0)).add(MI.getOperand(1)).add(MI.getOperand(2)).add(MI.getOperand(3)).add(MI.getOperand(4));
+							MoveInstruction->addMemOperand(MF, *MI.memoperands().begin());
+							MachineBasicBlock::iterator CallInstruction = BuildMI(*BasicBlockIterator, &MI, MI.getDebugLoc(), TII->get(X86::CALL64r)).addReg(Reg);
+							CallInstruction->copyImplicitOps(MF, MI);
+							BasicBlockIterator->erase(&MI);
+							MachineInstructionIterator = CallInstruction;
+						}
+					}
+				}
+			}
 			bool runOnMachineFunction(MachineFunction &MF) {
+				if(InstrumentSandboxingCFI)
+					removeCall64m(MF);
 				addBoundChecks(MF);
 				return 0;
 			}
@@ -173,11 +203,11 @@ namespace {
 }
 
 char SandBoxingPass::ID = 0;
-char DummyPass::ID = 0;
+char SandBoxingPreRegallocPass::ID = 0;
 
 FunctionPass *llvm::createSandBoxingPass() {
 	return new SandBoxingPass();
 }
-FunctionPass *llvm::createDummyPass() {
-	return new DummyPass();
+FunctionPass *llvm::createSandBoxingPreRegallocPass() {
+	return new SandBoxingPreRegallocPass();
 }
